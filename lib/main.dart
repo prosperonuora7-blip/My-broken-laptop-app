@@ -235,7 +235,6 @@ class _StrataLayoutState extends State<StrataLayout> {
   Widget _buildCategorySection(String title, String status) {
     final filtered = widget.tasks.where((t) => t.status == status && t.title.toLowerCase().contains(widget.searchQuery.toLowerCase())).toList();
     
-    // Automatic Sorting: Soonest date first, then highest priority
     filtered.sort((a, b) {
       if (a.dueDate != null && b.dueDate != null) {
         int dateCompare = a.dueDate!.compareTo(b.dueDate!);
@@ -351,18 +350,69 @@ class _StrataLayoutState extends State<StrataLayout> {
   Widget _buildDashboardView() {
     int total = widget.tasks.length;
     int done = widget.tasks.where((t) => t.status == 'done').length;
+    int todo = total - done;
     double progress = total == 0 ? 0 : done / total;
-    return Center(child: Padding(padding: const EdgeInsets.all(40.0), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Text("Productivity Overview", style: Theme.of(context).textTheme.headlineMedium),
-      const SizedBox(height: 20),
-      AnimatedContainer(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-        width: 300, 
-        child: LinearProgressIndicator(value: progress, minHeight: 10),
+    int highPriority = widget.tasks.where((t) => t.priority == 2 && t.status != 'done').length;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0), 
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center, 
+          children: [
+            Text("Productivity Overview", style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: 24),
+            Card(
+              elevation: 3,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  children: [
+                    const Text("Overall Completion", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 500),
+                      curve: Curves.easeInOut,
+                      width: 250, 
+                      child: LinearProgressIndicator(value: progress, minHeight: 12, borderRadius: BorderRadius.circular(6)),
+                    ),
+                    const SizedBox(height: 12),
+                    Text("$done of $total tasks completed (${(progress * 100).toStringAsFixed(0)}%)", style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildStatCard("Pending", todo.toString(), Colors.orange),
+                const SizedBox(width: 12),
+                _buildStatCard("High Priority", highPriority.toString(), Colors.red),
+              ],
+            ),
+          ],
+        ),
       ),
-      const SizedBox(height: 20),
-      Text("$done / $total tasks completed"),
-    ])));
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, Color color) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Column(
+          children: [
+            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 4),
+            Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
   }
 }
+
