@@ -258,19 +258,43 @@ class _StrataLayoutState extends State<StrataLayout> {
             elevation: 2,
             margin: const EdgeInsets.only(bottom: 8),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: ListTile(
-              leading: Checkbox(value: task.completed, shape: const CircleBorder(), onChanged: (v) => widget.toggleTask(index, v!)),
-              title: Text(task.title, style: TextStyle(decoration: task.completed ? TextDecoration.lineThrough : null)),
-              subtitle: Wrap(spacing: 8, children: [
-                 if (task.dueDate != null) Chip(label: Text(DateFormat('yMMMd, h:mm a').format(task.dueDate!), style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
-                 Chip(label: Text(task.category, style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
-                 Icon(Icons.flag, size: 16, color: [Colors.grey, Colors.orange, Colors.red][task.priority]),
-              ]),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _showEditDialog(index, task)),
-                  IconButton(icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent), onPressed: () => widget.deleteTask(index)),
+                  Checkbox(value: task.completed, shape: const CircleBorder(), onChanged: (v) => widget.toggleTask(index, v!)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.title, 
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            decoration: task.completed ? TextDecoration.lineThrough : null
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8, 
+                          runSpacing: 4,
+                          children: [
+                             if (task.dueDate != null) Chip(label: Text(DateFormat('yMMMd, h:mm a').format(task.dueDate!), style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
+                             Chip(label: Text(task.category, style: const TextStyle(fontSize: 10)), visualDensity: VisualDensity.compact),
+                             Icon(Icons.flag, size: 16, color: [Colors.grey, Colors.orange, Colors.red][task.priority]),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => _showEditDialog(index, task)),
+                      IconButton(icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent), onPressed: () => widget.deleteTask(index)),
+                    ],
+                  ),
                 ],
               ),
             ),
