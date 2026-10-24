@@ -385,11 +385,10 @@ class _StrataLayoutState extends State<StrataLayout> {
             ),
             const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildStatCard("Pending", todo.toString(), Colors.orange),
+                Expanded(child: _buildStatCard("Pending", todo.toString(), Colors.orange)),
                 const SizedBox(width: 12),
-                _buildStatCard("High Priority", highPriority.toString(), Colors.red),
+                Expanded(child: _buildStatCard("High Priority", highPriority.toString(), Colors.red)),
               ],
             ),
           ],
@@ -403,12 +402,12 @@ class _StrataLayoutState extends State<StrataLayout> {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Column(
           children: [
             Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
           ],
         ),
       ),
