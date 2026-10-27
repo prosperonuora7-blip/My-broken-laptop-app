@@ -15,7 +15,7 @@ class Task {
   String category;
   String priority;
   DateTime dueDate;
-  bool notified; // Tracks if a notification has already been triggered
+  bool notified;
 
   Task({
     required this.title,
@@ -75,12 +75,15 @@ class _StrataHomePageState extends State<StrataHomePage> {
   List<Task> _tasks = [];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isToDoExpanded = true;
+  bool _isDoneExpanded = true;
   Timer? _notificationTimer;
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
+    
     // Check for due tasks every 10 seconds for live notifications
     _notificationTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       _checkTaskNotifications();
@@ -102,7 +105,6 @@ class _StrataHomePageState extends State<StrataHomePage> {
         task.notified = true;
         _saveTasks();
         
-        // Show live alert banner
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -121,7 +123,6 @@ class _StrataHomePageState extends State<StrataHomePage> {
     }
   }
 
-  // Load tasks from SharedPreferences
   Future<void> _loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
     final String? tasksString = prefs.getString('strata_tasks');
@@ -131,10 +132,9 @@ class _StrataHomePageState extends State<StrataHomePage> {
         _tasks = decoded.map((item) => Task.fromJson(item)).toList();
       });
     } else {
-      // Default sample tasks if empty
       setState(() {
         _tasks = [
-          Task(title: 'Dog Food', isDone: false, category: 'Personal', priority: 'Normal', dueDate: DateTime.now().add(const Duration(minutes: 1))),
+          Task(title: 'Dog Food', isDone: false, category: 'General', priority: 'Normal', dueDate: DateTime.now().add(const Duration(minutes: 2))),
           Task(title: 'Payment', isDone: false, category: 'Work', priority: 'High', dueDate: DateTime.now().add(const Duration(hours: 1))),
           Task(title: 'Salaries', isDone: true, category: 'Work', priority: 'High', dueDate: DateTime.now().add(const Duration(hours: 2))),
         ];
@@ -143,17 +143,14 @@ class _StrataHomePageState extends State<StrataHomePage> {
     }
   }
 
-  // Save tasks to SharedPreferences
   Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
     final String encoded = jsonEncode(_tasks.map((t) => t.toJson()).toList());
     await prefs.setString('strata_tasks', encoded);
   }
 
-  // Export Tasks to JSON File (Web)
   void _exportTasks() {
     final String jsonString = jsonEncode(_tasks.map((t) => t.toJson()).toList());
-    
     if (kIsWeb) {
       final bytes = utf8.encode(jsonString);
       final blob = html.Blob([bytes]);
@@ -162,14 +159,12 @@ class _StrataHomePageState extends State<StrataHomePage> {
         ..setAttribute("download", "strata_app_backup.json")
         ..click();
       html.Url.revokeObjectUrl(url);
-      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Backup exported successfully!')),
       );
     }
   }
 
-  // Show Dialog to Import Tasks via JSON text paste
   void _showImportDialog() {
     final TextEditingController importController = TextEditingController();
     showDialog(
@@ -184,18 +179,12 @@ class _StrataHomePageState extends State<StrataHomePage> {
             TextField(
               controller: importController,
               maxLines: 5,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Paste JSON data here...',
-              ),
+              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Paste JSON data here...'),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               _importTasks(importController.text);
@@ -208,7 +197,6 @@ class _StrataHomePageState extends State<StrataHomePage> {
     );
   }
 
-  // Import Tasks from JSON string
   void _importTasks(String jsonString) {
     try {
       final List<dynamic> decodedData = jsonDecode(jsonString);
@@ -216,29 +204,24 @@ class _StrataHomePageState extends State<StrataHomePage> {
         _tasks = decodedData.map((item) => Task.fromJson(item)).toList();
       });
       _saveTasks();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tasks restored successfully!')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tasks restored successfully!')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to import backup: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to import backup: $e')));
     }
   }
 
-  // Add Task Dialog with Date & Time Pickers
-  void _showAddTaskDialog() {
-    final titleController = TextEditingController();
-    String category = 'Personal';
-    String priority = 'Normal';
-    DateTime selectedDate = DateTime.now();
-    TimeOfDay selectedTime = TimeOfDay.now();
+  void _showTaskDialog({Task? taskToEdit}) {
+    final titleController = TextEditingController(text: taskToEdit?.title ?? '');
+    String category = taskToEdit?.category ?? 'General';
+    String priority = taskToEdit?.priority ?? 'Normal';
+    DateTime selectedDate = taskToEdit?.dueDate ?? DateTime.now();
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(taskToEdit?.dueDate ?? DateTime.now());
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add New Task'),
+          title: Text(taskToEdit == null ? 'Add New Task' : 'Edit Task'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -248,21 +231,21 @@ class _StrataHomePageState extends State<StrataHomePage> {
                   controller: titleController,
                   decoration: const InputDecoration(labelText: 'Task Title'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: category,
-                  items: ['Personal', 'Work', 'Urgent'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  items: ['General', 'Personal', 'Work', 'Urgent'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                   onChanged: (val) => setDialogState(() => category = val!),
                   decoration: const InputDecoration(labelText: 'Category'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: priority,
                   items: ['Normal', 'High'].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
                   onChanged: (val) => setDialogState(() => priority = val!),
                   decoration: const InputDecoration(labelText: 'Priority'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 const Text('Due Date & Time', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
                 const SizedBox(height: 8),
                 Row(
@@ -270,7 +253,7 @@ class _StrataHomePageState extends State<StrataHomePage> {
                     Expanded(
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.calendar_today, size: 16),
-                        label: Text('${selectedDate.month}/${selectedDate.day}/${selectedDate.year}'),
+                        label: Text('${selectedDate.year}${selectedDate.month.toString().padLeft(2, '0')}${selectedDate.day.toString().padLeft(2, '0')}'),
                         onPressed: () async {
                           final DateTime? pickedDate = await showDatePicker(
                             context: context,
@@ -318,18 +301,27 @@ class _StrataHomePageState extends State<StrataHomePage> {
                     selectedTime.minute,
                   );
                   setState(() {
-                    _tasks.add(Task(
-                      title: titleController.text,
-                      category: category,
-                      priority: priority,
-                      dueDate: finalDueDate,
-                    ));
+                    if (taskToEdit == null) {
+                      _tasks.add(Task(
+                        title: titleController.text,
+                        category: category,
+                        priority: priority,
+                        dueDate: finalDueDate,
+                        notified: false,
+                      ));
+                    } else {
+                      taskToEdit.title = titleController.text;
+                      taskToEdit.category = category;
+                      taskToEdit.priority = priority;
+                      taskToEdit.dueDate = finalDueDate;
+                      taskToEdit.notified = false; // Reset notification flag on edit
+                    }
                   });
                   _saveTasks();
                   Navigator.pop(context);
                 }
               },
-              child: const Text('Add'),
+              child: Text(taskToEdit == null ? 'Add' : 'Save'),
             ),
           ],
         ),
@@ -346,44 +338,32 @@ class _StrataHomePageState extends State<StrataHomePage> {
     final highPriorityCount = _tasks.where((t) => t.priority == 'High' && !t.isDone).length;
 
     final filteredTasks = _tasks.where((t) => t.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    final toDoTasks = filteredTasks.where((t) => !t.isDone).toList();
+    final doneTasks = filteredTasks.where((t) => t.isDone).toList();
 
     return Scaffold(
       body: Row(
         children: [
-          // Navigation Rail
           NavigationRail(
             selectedIndex: _currentIndex,
-            onDestinationSelected: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
+            onDestinationSelected: (index) => setState(() => _currentIndex = index),
             labelType: NavigationRailLabelType.none,
             destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.dashboard_outlined),
-                selectedIcon: Icon(Icons.dashboard),
-                label: Text('Overview'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.checklist_outlined),
-                selectedIcon: Icon(Icons.checklist),
-                label: Text('Tasks'),
-              ),
+              NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: Text('Overview')),
+              NavigationRailDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist), label: Text('Tasks')),
             ],
           ),
           const VerticalDivider(thickness: 1, width: 1),
-          // Main Content Area
           Expanded(
             child: _currentIndex == 0
                 ? _buildDashboardView(completionPercentage, completedCount, totalCount, pendingCount, highPriorityCount)
-                : _buildTasksView(filteredTasks),
+                : _buildTasksView(toDoTasks, doneTasks),
           ),
         ],
       ),
       floatingActionButton: _currentIndex == 1
           ? FloatingActionButton(
-              onPressed: _showAddTaskDialog,
+              onPressed: () => _showTaskDialog(),
               child: const Icon(Icons.add),
             )
           : null,
@@ -396,10 +376,7 @@ class _StrataHomePageState extends State<StrataHomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Productivity Overview',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-          ),
+          const Text('Productivity Overview', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
           const SizedBox(height: 24),
           Card(
             child: Padding(
@@ -475,7 +452,7 @@ class _StrataHomePageState extends State<StrataHomePage> {
     );
   }
 
-  Widget _buildTasksView(List<Task> tasks) {
+  Widget _buildTasksView(List<Task> toDo, List<Task> done) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -493,70 +470,110 @@ class _StrataHomePageState extends State<StrataHomePage> {
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: tasks.isEmpty
-                ? const Center(child: Text('No tasks found.'))
-                : ListView.builder(
-                    itemCount: tasks.length,
-                    itemBuilder: (context, index) {
-                      final task = tasks[index];
-                      final String formattedDate = '${task.dueDate.year}'
-                          '${task.dueDate.month.toString().padLeft(2, '0')}'
-                          '${task.dueDate.day.toString().padLeft(2, '0')} '
-                          '${task.dueDate.hour.toString().padLeft(2, '0')}:${task.dueDate.minute.toString().padLeft(2, '0')}';
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          leading: Checkbox(
-                            value: task.isDone,
-                            onChanged: (val) {
-                              setState(() {
-                                task.isDone = val ?? false;
-                              });
-                              _saveTasks();
-                            },
-                          ),
-                          title: Text(
-                            task.title,
-                            style: TextStyle(
-                              decoration: task.isDone ? TextDecoration.lineThrough : null,
-                            ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(formattedDate, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 8,
-                                children: [
-                                  Chip(label: Text(task.category), visualDensity: VisualDensity.compact),
-                                  if (task.priority == 'High')
-                                    const Chip(
-                                      label: Text('High', style: TextStyle(color: Colors.redAccent)),
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          isThreeLine: true,
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.redAccent),
-                            onPressed: () {
-                              setState(() {
-                                _tasks.remove(task);
-                              });
-                              _saveTasks();
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+            child: ListView(
+              children: [
+                ExpansionTile(
+                  title: Text('To-Do (${toDo.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  initiallyExpanded: _isToDoExpanded,
+                  onExpansionChanged: (val) => setState(() => _isToDoExpanded = val),
+                  children: toDo.isEmpty
+                      ? [const Padding(padding: EdgeInsets.all(12.0), child: Text('No pending tasks'))]
+                      : toDo.map((task) => _buildTaskCard(task)).toList(),
+                ),
+                const SizedBox(height: 12),
+                ExpansionTile(
+                  title: Text('Done (${done.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  initiallyExpanded: _isDoneExpanded,
+                  onExpansionChanged: (val) => setState(() => _isDoneExpanded = val),
+                  children: done.isEmpty
+                      ? [const Padding(padding: EdgeInsets.all(12.0), child: Text('No completed tasks'))]
+                      : done.map((task) => _buildTaskCard(task)).toList(),
+                ),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTaskCard(Task task) {
+    final String formattedDate = '${task.dueDate.year}'
+        '${task.dueDate.month.toString().padLeft(2, '0')}'
+        '${task.dueDate.day.toString().padLeft(2, '0')} '
+        '${task.dueDate.hour.toString().padLeft(2, '0')}:${task.dueDate.minute.toString().padLeft(2, '0')}';
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Checkbox(
+                  value: task.isDone,
+                  onChanged: (val) {
+                    setState(() {
+                      task.isDone = val ?? false;
+                    });
+                    _saveTasks();
+                  },
+                ),
+                Expanded(
+                  child: Text(
+                    task.title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      decoration: task.isDone ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 20, color: Colors.grey),
+                  onPressed: () => _showTaskDialog(taskToEdit: task),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, size: 20, color: Colors.redAccent),
+                  onPressed: () => setState(() {
+                    _tasks.remove(task);
+                    _saveTasks();
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.flag,
+                  size: 16,
+                  color: task.priority == 'High' ? Colors.redAccent : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(formattedDate, style: const TextStyle(fontSize: 11)),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(task.category, style: const TextStyle(fontSize: 11)),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
