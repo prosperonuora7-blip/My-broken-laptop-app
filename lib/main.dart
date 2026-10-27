@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:html' as html;
+import 'dart:async';
 
 void main() {
   runApp(const StrataApp());
@@ -14,6 +15,7 @@ class Task {
   String category;
   String priority;
   DateTime dueDate;
+  bool notified; // Tracks if a notification has already been triggered
 
   Task({
     required this.title,
@@ -21,6 +23,7 @@ class Task {
     required this.category,
     required this.priority,
     required this.dueDate,
+    this.notified = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -29,6 +32,7 @@ class Task {
         'category': category,
         'priority': priority,
         'dueDate': dueDate.toIso8601String(),
+        'notified': notified,
       };
 
   factory Task.fromJson(Map<String, dynamic> json) => Task(
@@ -37,6 +41,7 @@ class Task {
         category: json['category'],
         priority: json['priority'],
         dueDate: DateTime.parse(json['dueDate']),
+        notified: json['notified'] ?? false,
       );
 }
 
@@ -70,11 +75,50 @@ class _StrataHomePageState extends State<StrataHomePage> {
   List<Task> _tasks = [];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _notificationTimer;
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
+    // Check for due tasks every 10 seconds for live notifications
+    _notificationTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _checkTaskNotifications();
+    });
+  }
+
+  @override
+  void dispose() {
+    _notificationTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Live Notification Checker
+  void _checkTaskNotifications() {
+    final now = DateTime.now();
+    for (var task in _tasks) {
+      if (!task.isDone && !task.notified && now.isAfter(task.dueDate)) {
+        task.notified = true;
+        _saveTasks();
+        
+        // Show live alert banner
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Reminder: Task "${task.title}" is due now!'),
+              backgroundColor: Colors.indigoAccent,
+              duration: const Duration(seconds: 6),
+              action: SnackBarAction(
+                label: 'OK',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+        }
+      }
+    }
   }
 
   // Load tasks from SharedPreferences
@@ -90,9 +134,9 @@ class _StrataHomePageState extends State<StrataHomePage> {
       // Default sample tasks if empty
       setState(() {
         _tasks = [
-          Task(title: 'Dog Food', isDone: false, category: 'Personal', priority: 'Normal', dueDate: DateTime.now()),
-          Task(title: 'Payment', isDone: false, category: 'Work', priority: 'High', dueDate: DateTime.now()),
-          Task(title: 'Salaries', isDone: true, category: 'Work', priority: 'High', dueDate: DateTime.now()),
+          Task(title: 'Dog Food', isDone: false, category: 'Personal', priority: 'Normal', dueDate: DateTime.now().add(const Duration(minutes: 1))),
+          Task(title: 'Payment', isDone: false, category: 'Work', priority: 'High', dueDate: DateTime.now().add(const Duration(hours: 1))),
+          Task(title: 'Salaries', isDone: true, category: 'Work', priority: 'High', dueDate: DateTime.now().add(const Duration(hours: 2))),
         ];
       });
       _saveTasks();
@@ -182,51 +226,103 @@ class _StrataHomePageState extends State<StrataHomePage> {
     }
   }
 
-  // Add Task Dialog
+  // Add Task Dialog with Date & Time Pickers
   void _showAddTaskDialog() {
     final titleController = TextEditingController();
     String category = 'Personal';
     String priority = 'Normal';
+    DateTime selectedDate = DateTime.now();
+    TimeOfDay selectedTime = TimeOfDay.now();
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Add New Task'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'Task Title'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: category,
-                items: ['Personal', 'Work', 'Urgent'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                onChanged: (val) => setDialogState(() => category = val!),
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: priority,
-                items: ['Normal', 'High'].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                onChanged: (val) => setDialogState(() => priority = val!),
-                decoration: const InputDecoration(labelText: 'Priority'),
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: 'Task Title'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: category,
+                  items: ['Personal', 'Work', 'Urgent'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (val) => setDialogState(() => category = val!),
+                  decoration: const InputDecoration(labelText: 'Category'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: priority,
+                  items: ['Normal', 'High'].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+                  onChanged: (val) => setDialogState(() => priority = val!),
+                  decoration: const InputDecoration(labelText: 'Priority'),
+                ),
+                const SizedBox(height: 16),
+                const Text('Due Date & Time', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text('${selectedDate.month}/${selectedDate.day}/${selectedDate.year}'),
+                        onPressed: () async {
+                          final DateTime? pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (pickedDate != null) {
+                            setDialogState(() => selectedDate = pickedDate);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time, size: 16),
+                        label: Text(selectedTime.format(context)),
+                        onPressed: () async {
+                          final TimeOfDay? pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: selectedTime,
+                          );
+                          if (pickedTime != null) {
+                            setDialogState(() => selectedTime = pickedTime);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () {
                 if (titleController.text.isNotEmpty) {
+                  final DateTime finalDueDate = DateTime(
+                    selectedDate.year,
+                    selectedDate.month,
+                    selectedDate.day,
+                    selectedTime.hour,
+                    selectedTime.minute,
+                  );
                   setState(() {
                     _tasks.add(Task(
                       title: titleController.text,
                       category: category,
                       priority: priority,
-                      dueDate: DateTime.now(),
+                      dueDate: finalDueDate,
                     ));
                   });
                   _saveTasks();
@@ -403,6 +499,11 @@ class _StrataHomePageState extends State<StrataHomePage> {
                     itemCount: tasks.length,
                     itemBuilder: (context, index) {
                       final task = tasks[index];
+                      final String formattedDate = '${task.dueDate.year}'
+                          '${task.dueDate.month.toString().padLeft(2, '0')}'
+                          '${task.dueDate.day.toString().padLeft(2, '0')} '
+                          '${task.dueDate.hour.toString().padLeft(2, '0')}:${task.dueDate.minute.toString().padLeft(2, '0')}';
+
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: ListTile(
@@ -421,17 +522,26 @@ class _StrataHomePageState extends State<StrataHomePage> {
                               decoration: task.isDone ? TextDecoration.lineThrough : null,
                             ),
                           ),
-                          subtitle: Wrap(
-                            spacing: 8,
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Chip(label: Text(task.category), visualDensity: VisualDensity.compact),
-                              if (task.priority == 'High')
-                                const Chip(
-                                  label: Text('High', style: TextStyle(color: Colors.redAccent)),
-                                  visualDensity: VisualDensity.compact,
-                                ),
+                              const SizedBox(height: 4),
+                              Text(formattedDate, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  Chip(label: Text(task.category), visualDensity: VisualDensity.compact),
+                                  if (task.priority == 'High')
+                                    const Chip(
+                                      label: Text('High', style: TextStyle(color: Colors.redAccent)),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                ],
+                              ),
                             ],
                           ),
+                          isThreeLine: true,
                           trailing: IconButton(
                             icon: const Icon(Icons.delete, color: Colors.redAccent),
                             onPressed: () {
